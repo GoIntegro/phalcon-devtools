@@ -285,7 +285,15 @@ class Migration
             }
             $indexesDefinition[] = "\t\t\t\tnew Index('".$indexName."', array(" . join(", ", $indexDefinition) . "))";
         }
-
+        
+        $constraintsDefinition = [];
+        
+        if (self::$_connection instanceof \Phalcon\Db\Adapter\Pdo\Mysql) {
+            $result = self::$_connection->query("SELECT CONSTRAINT_NAME,UPDATE_RULE, DELETE_RULE FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE TABLE_NAME = ? AND CONSTRAINT_SCHEMA = ?", array($table, $defaultSchema));
+            $result->setFetchMode(\Phalcon\Db::FETCH_ASSOC);
+            $constraintsDefinition = $result->fetchAll();
+        }
+        
         $referencesDefinition = array();
         $references = self::$_connection->describeReferences($table, $defaultSchema);
         foreach ($references as $constraintName => $dbReference) {
@@ -304,8 +312,18 @@ class Migration
             $referenceDefinition[] = "'referencedTable' => '" . $dbReference->getReferencedTable() . "'";
             $referenceDefinition[] = "'columns' => array(" . join(",", $columns) . ")";
             $referenceDefinition[] = "'referencedColumns' => array(".join(",", $referencedColumns) . ")";
+            
+            if (count($constraintsDefinition)) {
+                foreach($constraintsDefinition as $constraint) {
+                    if ($constraint['CONSTRAINT_NAME'] == $constraintName) {
+                        $referenceDefinition[] = "'onDelete' => '".$constraint['DELETE_RULE']."'";
+                        $referenceDefinition[] = "'onUpdate' => '".$constraint['UPDATE_RULE']."'";
+                    }
+                }
 
-            $referencesDefinition[] = "\t\t\t\tnew Reference('" . $constraintName."', array(\n\t\t\t\t\t" . join(",\n\t\t\t\t\t", $referenceDefinition) . "\n\t\t\t\t))";
+            }
+            
+            $referencesDefinition[] = $snippet->getReferenceDefinition($constraintName, $referenceDefinition);
         }
 
         $optionsDefinition = array();
@@ -491,7 +509,15 @@ class ".$className." extends Migration\n".
                 foreach ($definition['references'] as $tableReference) {
                     $references[$tableReference->getName()] = $tableReference;
                 }
-
+                
+                $constaintsDefinition = [];
+                
+                if (self::$_connection instanceof \Phalcon\Db\Adapter\Pdo\Mysql) {
+                    $result = self::$_connection->query("SELECT CONSTRAINT_NAME,UPDATE_RULE, DELETE_RULE FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE TABLE_NAME = ? AND CONSTRAINT_SCHEMA = ?", array($tableName, $defaultSchema));
+                    $result->setFetchMode(\Phalcon\Db::FETCH_ASSOC);
+                    $constraintsDefinition = $result->fetchAll();
+                }
+                
                 $localReferences = array();
                 $activeReferences = self::$_connection->describeReferences($tableName, $defaultSchema);
                 foreach ($activeReferences as $activeReference) {
@@ -500,6 +526,13 @@ class ".$className." extends Migration\n".
                         'columns' => $activeReference->getColumns(),
                         'referencedColumns' => $activeReference->getReferencedColumns(),
                     );
+                    foreach($constraintsDefinition as $constraint) {
+                        if ($constraint['CONSTRAINT_NAME'] == $activeReference->getName()) {
+                            $localReferences[$activeReference->getName()]['onDelete'] = $constraint['DELETE_RULE'];
+                            $localReferences[$activeReference->getName()]['onUpdate'] = $constraint['UPDATE_RULE'];
+                            
+                        }
+                    }                    
                 }
 
                 foreach ($definition['references'] as $tableReference) {
@@ -539,6 +572,18 @@ class ".$className." extends Migration\n".
                             }
                         }
 
+                        if ($changed == false) {
+                            if ($tableReference->getOnDelete() != null && $tableReference->getOnDelete() != $localReferences[$tableReference->getName()]['onDelete']) {
+                                $changed = true;
+                            }
+                        }
+
+                        if ($changed == false) {
+                            if ($tableReference->getOnUpdate() != null && $tableReference->getOnUpdate() != $localReferences[$tableReference->getName()]['onUpdate']) {
+                                $changed = true;
+                            }
+                        }
+                        
                         if ($changed == true) {
                             self::$_connection->dropForeignKey($tableName, $tableReference->getSchemaName(), $tableReference->getName());
                             self::$_connection->addForeignKey($tableName, $tableReference->getSchemaName(), $tableReference);
