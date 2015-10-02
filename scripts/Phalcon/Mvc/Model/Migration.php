@@ -323,7 +323,7 @@ class Migration
 
             }
             
-            $referencesDefinition[] = $snippet->getReferenceDefinition($constraintName, $referenceDefinition);
+            $referencesDefinition[] = "\t\t\t\tnew Reference('" . $constraintName."', array(\n\t\t\t\t\t" . join(",\n\t\t\t\t\t", $referenceDefinition) . "\n\t\t\t\t))";
         }
 
         $optionsDefinition = array();
