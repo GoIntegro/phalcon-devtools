@@ -308,7 +308,6 @@ class Migration
             }
 
             $referenceDefinition = array();
-            $referenceDefinition[] = "'referencedSchema' => '" . $dbReference->getReferencedSchema() . "'";
             $referenceDefinition[] = "'referencedTable' => '" . $dbReference->getReferencedTable() . "'";
             $referenceDefinition[] = "'columns' => array(" . join(",", $columns) . ")";
             $referenceDefinition[] = "'referencedColumns' => array(".join(",", $referencedColumns) . ")";
